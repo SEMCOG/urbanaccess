@@ -741,7 +741,8 @@ def _format_transit_net_edge(stop_times_df):
     stop_times_df.sort_values(by=['unique_trip_id', 'stop_sequence'],
                               inplace=True)
 
-    for trip, tmp_trip_df in stop_times_df.groupby(['unique_trip_id']):
+    for trip, tmp_trip_df in stop_times_df.groupby('unique_trip_id'):
+
         edge_df = pd.DataFrame({
             "node_id_from": tmp_trip_df['unique_stop_id'].iloc[:-1].values,
             "node_id_to": tmp_trip_df['unique_stop_id'].iloc[1:].values,
@@ -751,7 +752,6 @@ def _format_transit_net_edge(stop_times_df):
             # set unique trip id without edge order to join other data later
             "unique_trip_id": trip
         })
-
         # Set current trip id to edge id column adding edge order at
         # end of string
         edge_df['sequence'] = (edge_df.index + 1).astype(int)
