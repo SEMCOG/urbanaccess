@@ -1,9 +1,9 @@
 import warnings
 import pandas as pd
 import time
+import logging as lg
 
 from urbanaccess.utils import log
-from urbanaccess.gtfs.utils_validation import _check_time_range_format
 from urbanaccess.gtfs.network import _time_selector
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -16,13 +16,13 @@ def _calc_headways_by_route_stop(df):
     Parameters
     ----------
     df : pandas.DataFrame
-        interpolated stop times DataFrame for stop times within the time
+        interpolated stop times dataframe for stop times within the time
         range with appended trip and route information
 
     Returns
     -------
-    DataFrame : pandas.DataFrame
-        DataFrame of statistics of route stop headways in units of minutes
+    dataframe : pandas.DataFrame
+        dataframe of statistics of route stop headways in units of minutes
     """
 
     # TODO: Optimize for speed
@@ -68,25 +68,26 @@ def _headway_handler(interpolated_stop_times_df, trips_df,
     Parameters
     ----------
     interpolated_stop_times_df : pandas.DataFrame
-        interpolated stop times DataFrame for stop times within the time range
+        interpolated stop times dataframe for stop times within the time range
     trips_df : pandas.DataFrame
-        trips DataFrame
+        trips dataframe
     routes_df : pandas.DataFrame
-        routes DataFrame
+        routes dataframe
     headway_timerange : list
-        time range for which to calculate headways between in a list with time
-        1 and time 2 as strings. Must follow format of a 24 hour clock for
-        example: 08:00:00 or 17:00:00
+        time range for which to calculate headways between as a
+        list of time 1 and time 2 where times are 24 hour clock strings
+        such as:
+        ['07:00:00', '10:00:00']
 
     Returns
     -------
     headway_by_routestop_df : pandas.DataFrame
-        DataFrame of statistics of route stop headways in units of minutes
+        dataframe of statistics of route stop headways in units of minutes
         with relevant route and stop information
     """
     start_time = time.time()
 
-    # add unique trip and route ID
+    # add unique trip and route id
     trips_df['unique_trip_id'] = (
         trips_df['trip_id'].str.cat(
             trips_df['unique_agency_id'].astype('str'), sep='_'))
@@ -104,7 +105,7 @@ def _headway_handler(interpolated_stop_times_df, trips_df,
 
     trips_df = trips_df[columns]
 
-    # add unique route ID
+    # add unique route id
     routes_df['unique_route_id'] = (
         routes_df['route_id'].str.cat(
             routes_df['unique_agency_id'].astype('str'), sep='_'))
@@ -137,7 +138,7 @@ def _headway_handler(interpolated_stop_times_df, trips_df,
         headway_by_routestop_df['unique_stop_id'].str.cat(
             headway_by_routestop_df['unique_route_id'].astype('str'), sep='_'))
 
-    log('Headway calculation complete. Took {:,.2f} seconds.'.format(
+    log('headway calculation complete. Took {:,.2f} seconds'.format(
         time.time() - start_time))
 
     return headway_by_routestop_df
@@ -152,26 +153,50 @@ def headways(gtfsfeeds_df, headway_timerange):
     gtfsfeeds_df : object
         gtfsfeeds_dfs object with all processed GTFS data tables
     headway_timerange : list
-        time range for which to calculate headways between in a list with time
-        1 and time 2 as strings. Must follow format of a 24 hour clock for
-        example: 08:00:00 or 17:00:00
+        time range for which to calculate headways between as a list of
+        time 1 and time 2 where times are 24 hour clock strings such as:
+        ['07:00:00', '10:00:00']
 
     Returns
     -------
     gtfsfeeds_dfs.headways : pandas.DataFrame
-        gtfsfeeds_dfs object for the headways DataFrame with statistics of
-        route stop headways in units of minutes with relevant route and stop
-        information
+        gtfsfeeds_dfs object for the headways dataframe with statistics of
+        route stop headways in units of minutes
+        with relevant route and stop information
     """
-    _check_time_range_format(headway_timerange)
+
+    time_error_statement = (
+        '{} starttime and endtime are not in the correct format. '
+        'Format should be a 24 hour clock in following format: 08:00:00 '
+        'or 17:00:00'.format(headway_timerange))
+    if not isinstance(headway_timerange, list) or len(headway_timerange) != 2:
+        raise ValueError('timerange must be a list of length 2')
+    if headway_timerange[0].split(':')[0] > headway_timerange[1].split(':')[0]:
+        raise ValueError('starttime is greater than endtime')
+
+    for t in headway_timerange:
+        if not isinstance(t, str):
+            raise ValueError(time_error_statement)
+        if len(t) != 8:
+            raise ValueError(time_error_statement)
+    if int(headway_timerange[1].split(':')[0]) - int(
+            headway_timerange[0].split(':')[0]) > 3:
+        long_time_range_msg = (
+            'WARNING: Time range passed: {} is a {} hour period. Long periods '
+            'over 3 hours may take a significant amount of time to process.')
+        log(long_time_range_msg.format(headway_timerange,
+                                       int(str(
+                                           headway_timerange[1][0:2])) - int(
+                                           str(headway_timerange[0][0:2]))),
+            level=lg.WARNING)
 
     if gtfsfeeds_df is None:
-        raise ValueError('gtfsfeeds_df cannot be None.')
+        raise ValueError('gtfsfeeds_df cannot be None')
     if gtfsfeeds_df.stop_times_int.empty or gtfsfeeds_df.trips.empty or \
             gtfsfeeds_df.routes.empty:
         raise ValueError(
-            'One of the following gtfsfeeds_dfs objects: stop_times_int, '
-            'trips, or routes were found to be empty.')
+            'one of the gtfsfeeds_dfs objects: stop_times_int, trips, '
+            'or routes were found to be empty.')
 
     headways_df = _headway_handler(
         interpolated_stop_times_df=gtfsfeeds_df.stop_times_int,
