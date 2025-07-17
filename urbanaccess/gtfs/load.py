@@ -170,6 +170,32 @@ def _txt_header_whitespace_check(gtfsfiles_to_use,
         'Took {:,.2f} seconds'.format(time.time() - start_time))
 
 
+def _clean_stops(stops_df, stop_times_df):
+    """
+    Removes duplicate stops and unused stops from the stops_df.
+    Prints out details of what's removed.
+    """
+    # Step 1: Drop duplicates based on stop_id, stop_lat, stop_lon
+    before_dedup = len(stops_df)
+    stops_df = stops_df.drop_duplicates(subset=["stop_id", "stop_lat", "stop_lon"])
+    after_dedup = len(stops_df)
+    print(f"Dropped {before_dedup - after_dedup:,} duplicate stops")
+
+    # Step 2: Remove stops not used in stop_times
+    used_stop_ids = set(stop_times_df["stop_id"].unique())
+    before_filter = len(stops_df)
+    unused_stops = stops_df[~stops_df["stop_id"].isin(used_stop_ids)]
+    stops_df = stops_df[stops_df["stop_id"].isin(used_stop_ids)]
+    after_filter = len(stops_df)
+    print(f"Dropped {before_filter - after_filter:,} unused stops")
+
+    # Optionally preview dropped stop_ids (limit to 10)
+    if not unused_stops.empty:
+        preview_ids = unused_stops["stop_id"].tolist()
+        print(f"⤷ Unused stop_ids dropped: {preview_ids}")
+
+    return stops_df
+
 def gtfsfeed_to_df(gtfsfeed_path=None, validation=False, verbose=True,
                    bbox=None, remove_stops_outsidebbox=None,
                    append_definitions=False):
@@ -389,6 +415,9 @@ def gtfsfeed_to_df(gtfsfeed_path=None, validation=False, verbose=True,
                             routes_df=routes_df[['route_id', 'route_type']],
                             trips_df=trips_df[['trip_id', 'route_id']],
                             info_to_append='route_type_to_stop_times'))
+
+        # clean up stops_df by removing unused stops in stop_times
+        stops_df = _clean_stops(stops_df, stop_times_df)
 
         merged_stops_df = pd.concat([merged_stops_df, stops_df], ignore_index=True)
         merged_routes_df = pd.concat([merged_routes_df, routes_df],
